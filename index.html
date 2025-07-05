@@ -1,96 +1,143 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Formulario GPS a WhatsApp</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Formulario 18:48 - Monitoreo GPS</title>
   <style>
     body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
-    label { display: block; margin-top: 10px; }
-    input, textarea, select, button { width: 100%; padding: 8px; margin-top: 5px; }
-    #progreso { height: 20px; background: #eee; margin: 10px 0; }
-    #barra { height: 100%; width: 0%; background: green; }
-    ul { padding-left: 20px; }
+    input, button { display: block; width: 100%; margin: 10px 0; padding: 10px; }
   </style>
 </head>
 <body>
-  <h2>Registro de Monitoreo GPS</h2>
+
+  <h2>Formulario 18:48</h2>
+  <p>Prototipo diseñado por Carlos Aliaga</p>
+
   <form id="formulario">
-    <label>DNI<input type="text" id="dni" required pattern="\\d{8}" maxlength="8" /></label>
-    <label>Celular<input type="tel" id="celular" required pattern="\\d{9}" maxlength="9" /></label>
-    <label>Placa<input type="text" id="placa" required maxlength="7" /></label>
-    <label>Tipo de carga<input type="text" id="carga" /></label>
-    <label>Comentarios<textarea id="comentarios"></textarea></label>
-    <button type="submit">Iniciar monitoreo</button>
+    <input type="text" id="nombre" name="nombre" placeholder="Nombre del conductor" required>
+    <input type="text" id="placa" name="placa" placeholder="Placa del vehículo" required>
+    <button type="submit">Enviar y Guardar</button>
   </form>
 
-  <div id="monitoreo" style="display:none;">
-    <div id="progreso"><div id="barra"></div></div>
-    <ul id="log"></ul>
-    <button onclick="generarCSVyCompartir()">Enviar datos por WhatsApp</button>
-  </div>
+  <button onclick="descargarHistorial()">📥 Descargar historial</button>
+  <button onclick="compartirHistorial()">📤 Compartir por WhatsApp</button>
+  <button onclick="borrarHistorial()">🗑️ Borrar historial</button>
 
   <script>
-    let datos = [];
-    let contador = 0;
-    let intervalo;
-    const log = document.getElementById("log");
-    const barra = document.getElementById("barra");
+    const formulario = document.getElementById("formulario");
 
-    document.getElementById("formulario").addEventListener("submit", e => {
+    formulario.addEventListener("submit", function(e) {
       e.preventDefault();
-      datos = []; contador = 0;
-      document.getElementById("formulario").style.display = "none";
-      document.getElementById("monitoreo").style.display = "block";
-      capturarYGuardar();
-      intervalo = setInterval(() => {
-        capturarYGuardar();
-        contador++;
-        barra.style.width = (contador * 10) + "%";
-        if (contador >= 10) clearInterval(intervalo);
-      }, 60000);
+
+      const datos = {
+        nombre: document.getElementById("nombre").value,
+        placa: document.getElementById("placa").value,
+        lat: null,
+        lng: null
+      };
+
+      if ("geolocation" in navigator) {
+        navigator.geolocation.getCurrentPosition(pos => {
+          datos.lat = pos.coords.latitude;
+          datos.lng = pos.coords.longitude;
+          enviarYGuardar(datos);
+        }, err => {
+          alert("No se pudo obtener la ubicación. Se guardará sin GPS.");
+          enviarYGuardar(datos);
+        });
+      } else {
+        enviarYGuardar(datos);
+      }
+
+      formulario.reset();
     });
 
-    function capturarYGuardar() {
-      navigator.geolocation.getCurrentPosition(pos => {
-        const registro = {
-          fecha: new Date().toISOString(),
-          dni: document.getElementById("dni").value,
-          celular: document.getElementById("celular").value,
-          placa: document.getElementById("placa").value.toUpperCase().replace(/[^A-Z0-9]/g, ''),
-          carga: document.getElementById("carga").value,
-          comentarios: document.getElementById("comentarios").value,
-          latitud: pos.coords.latitude,
-          longitud: pos.coords.longitude,
-          precision: pos.coords.accuracy
-        };
-        datos.push(registro);
-        const li = document.createElement("li");
-        li.textContent = `${registro.fecha} - ${registro.latitud}, ${registro.longitud} (${registro.precision} m)`;
-        log.appendChild(li);
-      });
+    function enviarYGuardar(datos) {
+      const endpoint = ""; // Si tienes un backend, colócalo aquí
+
+      if (endpoint) {
+        fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(datos)
+        })
+        .then(res => {
+          if (res.ok) {
+            guardarEnHistorial(datos, "enviado");
+          } else {
+            guardarEnHistorial(datos, "pendiente");
+          }
+        })
+        .catch(() => guardarEnHistorial(datos, "pendiente"));
+      } else {
+        guardarEnHistorial(datos, "pendiente");
+      }
     }
 
-    function generarCSVyCompartir() {
-      const encabezado = "Fecha,DNI,Celular,Placa,Tipo de carga,Comentarios,Latitud,Longitud,Precisión";
-      const filas = datos.map(d =>
-        [d.fecha, d.dni, d.celular, d.placa, d.carga, d.comentarios, d.latitud, d.longitud, d.precision].join(",")
-      );
-      const csv = [encabezado].concat(filas).join("\n");
-      const blob = new Blob([csv], { type: "text/csv" });
+    function guardarEnHistorial(datos, estado = "pendiente") {
+      const historial = JSON.parse(localStorage.getItem("historialEnvios") || "[]");
+      const entrada = {
+        ...datos,
+        fecha: new Date().toISOString(),
+        estado
+      };
+      historial.push(entrada);
+      localStorage.setItem("historialEnvios", JSON.stringify(historial));
+      alert("Datos guardados localmente.");
+    }
+
+    function descargarHistorial() {
+      const historial = JSON.parse(localStorage.getItem("historialEnvios") || "[]");
+      if (historial.length === 0) return alert("No hay datos para descargar.");
+      const blob = new Blob([JSON.stringify(historial, null, 2)], {
+        type: "application/json"
+      });
       const url = URL.createObjectURL(blob);
-
-      const numero = "51967680665";
-      const mensaje = encodeURIComponent("Hola, adjunto el archivo de monitoreo GPS.");
-      const waURL = `https://wa.me/${numero}?text=${mensaje}`;
-
       const a = document.createElement("a");
       a.href = url;
-      a.download = "monitoreo.csv";
+      a.download = "historial_envios.json";
       a.click();
-
-      setTimeout(() => window.open(waURL, "_blank"), 1000);
+      URL.revokeObjectURL(url);
     }
+
+    function compartirHistorial() {
+      const historial = JSON.parse(localStorage.getItem("historialEnvios") || "[]");
+      if (historial.length === 0) return alert("No hay datos para compartir.");
+
+      const texto = historial.map(d => {
+        return `📍 ${d.fecha}\nNombre: ${d.nombre}\nPlaca: ${d.placa}\nUbicación: ${d.lat}, ${d.lng}`;
+      }).join("\n\n");
+
+      if (navigator.share) {
+        navigator.share({
+          title: "Historial de monitoreo",
+          text: texto
+        }).catch(err => {
+          console.error("Error al compartir:", err);
+        });
+      } else {
+        const url = `https://wa.me/?text=${encodeURIComponent(texto)}`;
+        window.open(url, "_blank");
+      }
+    }
+
+    function borrarHistorial() {
+      if (confirm("¿Estás seguro de borrar todo el historial?")) {
+        localStorage.removeItem("historialEnvios");
+        alert("Historial borrado.");
+      }
+    }
+
+    // Reintento automático cuando vuelve la conexión
+    window.addEventListener("online", () => {
+      const historial = JSON.parse(localStorage.getItem("historialEnvios") || "[]");
+      const pendientes = historial.filter(e => e.estado === "pendiente");
+      if (pendientes.length === 0) return;
+
+      pendientes.forEach(dato => enviarYGuardar(dato));
+    });
   </script>
+
 </body>
 </html>
