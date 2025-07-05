@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Formulario GPS a WhatsApp</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+    label { display: block; margin-top: 10px; }
+    input, textarea, select, button { width: 100%; padding: 8px; margin-top: 5px; }
+    #progreso { height: 20px; background: #eee; margin: 10px 0; }
+    #barra { height: 100%; width: 0%; background: green; }
+    ul { padding-left: 20px; }
+  </style>
+</head>
+<body>
+  <h2>Registro de Monitoreo GPS</h2>
+  <form id="formulario">
+    <label>DNI<input type="text" id="dni" required pattern="\\d{8}" maxlength="8" /></label>
+    <label>Celular<input type="tel" id="celular" required pattern="\\d{9}" maxlength="9" /></label>
+    <label>Placa<input type="text" id="placa" required maxlength="7" /></label>
+    <label>Tipo de carga<input type="text" id="carga" /></label>
+    <label>Comentarios<textarea id="comentarios"></textarea></label>
+    <button type="submit">Iniciar monitoreo</button>
+  </form>
+
+  <div id="monitoreo" style="display:none;">
+    <div id="progreso"><div id="barra"></div></div>
+    <ul id="log"></ul>
+    <button onclick="generarCSVyCompartir()">Enviar datos por WhatsApp</button>
+  </div>
+
+  <script>
+    let datos = [];
+    let contador = 0;
+    let intervalo;
+    const log = document.getElementById("log");
+    const barra = document.getElementById("barra");
+
+    document.getElementById("formulario").addEventListener("submit", e => {
+      e.preventDefault();
+      datos = []; contador = 0;
+      document.getElementById("formulario").style.display = "none";
+      document.getElementById("monitoreo").style.display = "block";
+      capturarYGuardar();
+      intervalo = setInterval(() => {
+        capturarYGuardar();
+        contador++;
+        barra.style.width = (contador * 10) + "%";
+        if (contador >= 10) clearInterval(intervalo);
+      }, 60000);
+    });
+
+    function capturarYGuardar() {
+      navigator.geolocation.getCurrentPosition(pos => {
+        const registro = {
+          fecha: new Date().toISOString(),
+          dni: document.getElementById("dni").value,
+          celular: document.getElementById("celular").value,
+          placa: document.getElementById("placa").value.toUpperCase().replace(/[^A-Z0-9]/g, ''),
+          carga: document.getElementById("carga").value,
+          comentarios: document.getElementById("comentarios").value,
+          latitud: pos.coords.latitude,
+          longitud: pos.coords.longitude,
+          precision: pos.coords.accuracy
+        };
+        datos.push(registro);
+        const li = document.createElement("li");
+        li.textContent = `${registro.fecha} - ${registro.latitud}, ${registro.longitud} (${registro.precision} m)`;
+        log.appendChild(li);
+      });
+    }
+
+    function generarCSVyCompartir() {
+      const encabezado = "Fecha,DNI,Celular,Placa,Tipo de carga,Comentarios,Latitud,Longitud,Precisión";
+      const filas = datos.map(d =>
+        [d.fecha, d.dni, d.celular, d.placa, d.carga, d.comentarios, d.latitud, d.longitud, d.precision].join(",")
+      );
+      const csv = [encabezado].concat(filas).join("\n");
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+
+      const numero = "51967680665";
+      const mensaje = encodeURIComponent("Hola, adjunto el archivo de monitoreo GPS.");
+      const waURL = `https://wa.me/${numero}?text=${mensaje}`;
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "monitoreo.csv";
+      a.click();
+
+      setTimeout(() => window.open(waURL, "_blank"), 1000);
+    }
+  </script>
+</body>
+</html>
