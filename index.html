@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Formulario 18:48 - Monitoreo GPS</title>
   <style>
     body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
@@ -15,19 +15,19 @@
   <p>Prototipo diseñado por Carlos Aliaga</p>
 
   <form id="formulario">
-    <input type="text" id="nombre" name="nombre" placeholder="Nombre del conductor" required>
-    <input type="text" id="placa" name="placa" placeholder="Placa del vehículo" required>
+    <input type="text" id="nombre" name="nombre" placeholder="Nombre del conductor" required />
+    <input type="text" id="placa" name="placa" placeholder="Placa del vehículo" required />
     <button type="submit">Enviar y Guardar</button>
   </form>
 
-  <button onclick="descargarHistorial()">📥 Descargar historial</button>
-  <button onclick="compartirHistorial()">📤 Compartir por WhatsApp</button>
+  <button onclick="descargarCSV()">📄 Descargar como CSV</button>
+  <button onclick="compartirPorWhatsApp()">📤 Enviar por WhatsApp</button>
   <button onclick="borrarHistorial()">🗑️ Borrar historial</button>
 
   <script>
     const formulario = document.getElementById("formulario");
 
-    formulario.addEventListener("submit", function(e) {
+    formulario.addEventListener("submit", function (e) {
       e.preventDefault();
 
       const datos = {
@@ -43,7 +43,7 @@
           datos.lng = pos.coords.longitude;
           enviarYGuardar(datos);
         }, err => {
-          alert("No se pudo obtener la ubicación. Se guardará sin GPS.");
+          alert("No se pudo obtener ubicación. Se guardará sin GPS.");
           enviarYGuardar(datos);
         });
       } else {
@@ -54,89 +54,60 @@
     });
 
     function enviarYGuardar(datos) {
-      const endpoint = ""; // Si tienes un backend, colócalo aquí
-
-      if (endpoint) {
-        fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(datos)
-        })
-        .then(res => {
-          if (res.ok) {
-            guardarEnHistorial(datos, "enviado");
-          } else {
-            guardarEnHistorial(datos, "pendiente");
-          }
-        })
-        .catch(() => guardarEnHistorial(datos, "pendiente"));
-      } else {
-        guardarEnHistorial(datos, "pendiente");
-      }
+      datos.fecha = new Date().toISOString();
+      guardarEnHistorial(datos, "pendiente"); // Estado fijo, sin backend
     }
 
-    function guardarEnHistorial(datos, estado = "pendiente") {
+    function guardarEnHistorial(datos, estado) {
       const historial = JSON.parse(localStorage.getItem("historialEnvios") || "[]");
-      const entrada = {
-        ...datos,
-        fecha: new Date().toISOString(),
-        estado
-      };
-      historial.push(entrada);
+      historial.push({ ...datos, estado });
       localStorage.setItem("historialEnvios", JSON.stringify(historial));
       alert("Datos guardados localmente.");
     }
 
-    function descargarHistorial() {
+    function descargarCSV() {
       const historial = JSON.parse(localStorage.getItem("historialEnvios") || "[]");
-      if (historial.length === 0) return alert("No hay datos para descargar.");
-      const blob = new Blob([JSON.stringify(historial, null, 2)], {
-        type: "application/json"
-      });
+      if (historial.length === 0) {
+        alert("No hay datos.");
+        return;
+      }
+
+      const encabezados = ["fecha", "nombre", "placa", "lat", "lng", "estado"];
+      const filas = historial.map(d =>
+        encabezados.map(h => `"${(d[h] ?? "")}"`).join(",")
+      );
+      const csv = [encabezados.join(","), ...filas].join("\n");
+      const blob = new Blob([csv], { type: "text/csv" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "historial_envios.json";
+      a.download = "historial.csv";
       a.click();
       URL.revokeObjectURL(url);
     }
 
-    function compartirHistorial() {
+    function compartirPorWhatsApp() {
       const historial = JSON.parse(localStorage.getItem("historialEnvios") || "[]");
-      if (historial.length === 0) return alert("No hay datos para compartir.");
+      if (historial.length === 0) {
+        alert("No hay datos.");
+        return;
+      }
 
-      const texto = historial.map(d => {
-        return `📍 ${d.fecha}\nNombre: ${d.nombre}\nPlaca: ${d.placa}\nUbicación: ${d.lat}, ${d.lng}`;
+      const mensaje = historial.map(d => {
+        return `📍 ${d.fecha}\nNombre: ${d.nombre}\nPlaca: ${d.placa}\nGPS: ${d.lat ?? "?"}, ${d.lng ?? "?"}`;
       }).join("\n\n");
 
-      if (navigator.share) {
-        navigator.share({
-          title: "Historial de monitoreo",
-          text: texto
-        }).catch(err => {
-          console.error("Error al compartir:", err);
-        });
-      } else {
-        const url = `https://wa.me/?text=${encodeURIComponent(texto)}`;
-        window.open(url, "_blank");
-      }
+      const telefono = "51967680665"; // Sin el +
+      const url = `https://wa.me/${telefono}?text=${encodeURIComponent(mensaje)}`;
+      window.open(url, "_blank");
     }
 
     function borrarHistorial() {
-      if (confirm("¿Estás seguro de borrar todo el historial?")) {
+      if (confirm("¿Borrar todos los datos guardados localmente?")) {
         localStorage.removeItem("historialEnvios");
-        alert("Historial borrado.");
+        alert("Historial eliminado.");
       }
     }
-
-    // Reintento automático cuando vuelve la conexión
-    window.addEventListener("online", () => {
-      const historial = JSON.parse(localStorage.getItem("historialEnvios") || "[]");
-      const pendientes = historial.filter(e => e.estado === "pendiente");
-      if (pendientes.length === 0) return;
-
-      pendientes.forEach(dato => enviarYGuardar(dato));
-    });
   </script>
 
 </body>
